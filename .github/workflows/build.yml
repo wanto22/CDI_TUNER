@@ -16,15 +16,6 @@ jobs:
       - name: Extract ZIP project
         run: unzip CDI_Tuner_App.zip
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Fix gradle.properties
         run: |
           cat > CDI_Tuner/android/gradle.properties << 'EOF'
@@ -33,6 +24,137 @@ jobs:
           org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
           kotlin.code.style=official
           EOF
+
+      - name: Fix XML layout files
+        run: |
+          python3 << 'PYEOF'
+          import os, re
+
+          layout_dir = "CDI_Tuner/android/app/src/main/res/layout"
+
+          settings_xml = '''<?xml version="1.0" encoding="utf-8"?>
+          <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+              xmlns:app="http://schemas.android.com/apk/res-auto"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent"
+              android:background="@color/bg_dark">
+              <LinearLayout
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:orientation="vertical"
+                  android:padding="16dp">
+                  <androidx.cardview.widget.CardView
+                      android:layout_width="match_parent"
+                      android:layout_height="wrap_content"
+                      android:layout_marginBottom="16dp"
+                      app:cardBackgroundColor="@color/card_bg"
+                      app:cardCornerRadius="12dp">
+                      <LinearLayout
+                          android:layout_width="match_parent"
+                          android:layout_height="wrap_content"
+                          android:orientation="vertical"
+                          android:padding="20dp">
+                          <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                              <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                                  android:text="Sudut Pulser" android:textColor="@color/text_primary" android:textSize="16sp" android:textStyle="bold"/>
+                              <TextView android:id="@+id/tvAngleValue" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                                  android:text="82 derajat" android:textColor="@color/chart_advance" android:textSize="20sp" android:textStyle="bold"/>
+                          </LinearLayout>
+                          <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                              android:text="Range: 50 - 95 derajat (Default Mio: 82)"
+                              android:textColor="@color/text_secondary" android:textSize="12sp" android:layout_marginTop="4dp" android:layout_marginBottom="12dp"/>
+                          <SeekBar android:id="@+id/seekAngle"
+                              android:layout_width="match_parent" android:layout_height="wrap_content"/>
+                          <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="4dp">
+                              <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                                  android:text="50" android:textColor="@color/text_secondary" android:textSize="11sp"/>
+                              <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                                  android:text="95" android:textColor="@color/text_secondary" android:textSize="11sp" android:gravity="end"/>
+                          </LinearLayout>
+                      </LinearLayout>
+                  </androidx.cardview.widget.CardView>
+                  <androidx.cardview.widget.CardView
+                      android:layout_width="match_parent"
+                      android:layout_height="wrap_content"
+                      android:layout_marginBottom="16dp"
+                      app:cardBackgroundColor="@color/card_bg"
+                      app:cardCornerRadius="12dp">
+                      <LinearLayout
+                          android:layout_width="match_parent"
+                          android:layout_height="wrap_content"
+                          android:orientation="vertical"
+                          android:padding="20dp">
+                          <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                              <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                                  android:text="RPM Limiter" android:textColor="@color/text_primary" android:textSize="16sp" android:textStyle="bold"/>
+                              <TextView android:id="@+id/tvLimiterValue" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                                  android:text="12000 RPM" android:textColor="@color/rpm_warning" android:textSize="18sp" android:textStyle="bold"/>
+                          </LinearLayout>
+                          <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                              android:text="Range: 4000 - 16000 RPM (step 500)"
+                              android:textColor="@color/text_secondary" android:textSize="12sp" android:layout_marginTop="4dp" android:layout_marginBottom="12dp"/>
+                          <SeekBar android:id="@+id/seekLimiter"
+                              android:layout_width="match_parent" android:layout_height="wrap_content"/>
+                          <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="4dp">
+                              <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                                  android:text="4000" android:textColor="@color/text_secondary" android:textSize="11sp"/>
+                              <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                                  android:text="16000" android:textColor="@color/text_secondary" android:textSize="11sp" android:gravity="end"/>
+                          </LinearLayout>
+                      </LinearLayout>
+                  </androidx.cardview.widget.CardView>
+                  <androidx.cardview.widget.CardView
+                      android:layout_width="match_parent"
+                      android:layout_height="wrap_content"
+                      android:layout_marginBottom="16dp"
+                      app:cardBackgroundColor="#1A2196F3"
+                      app:cardCornerRadius="12dp">
+                      <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                          android:padding="16dp"
+                          android:text="Perubahan di sini hanya memperbarui advance map dan limiter. Tekan Kirim untuk mengirim ke CDI dan menyimpan ke EEPROM."
+                          android:textColor="@color/text_secondary" android:textSize="13sp"/>
+                  </androidx.cardview.widget.CardView>
+                  <com.google.android.material.button.MaterialButton
+                      android:id="@+id/btnSendSettings"
+                      android:layout_width="match_parent"
+                      android:layout_height="wrap_content"
+                      android:layout_marginBottom="8dp"
+                      android:text="Kirim dan Simpan ke CDI"/>
+                  <com.google.android.material.button.MaterialButton
+                      android:id="@+id/btnRevertSettings"
+                      android:layout_width="match_parent"
+                      android:layout_height="wrap_content"
+                      android:text="Kembalikan ke Config CDI"
+                      style="@style/Widget.Material3.Button.OutlinedButton"/>
+              </LinearLayout>
+          </ScrollView>'''
+
+          with open(os.path.join(layout_dir, "fragment_settings.xml"), "w") as f:
+              f.write(settings_xml)
+
+          # Fix semua file XML: escape karakter & yang tidak valid
+          for fname in os.listdir(layout_dir):
+              if fname.endswith(".xml"):
+                  path = os.path.join(layout_dir, fname)
+                  with open(path, "r", encoding="utf-8") as f:
+                      content = f.read()
+                  # Escape & yang bukan bagian dari entity reference
+                  fixed = re.sub(r'&(?!(amp|lt|gt|quot|apos|#);)', '&amp;', content)
+                  with open(path, "w", encoding="utf-8") as f:
+                      f.write(fixed)
+                  print(f"Fixed: {fname}")
+
+          print("XML fix selesai!")
+          PYEOF
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
