@@ -25,126 +25,94 @@ jobs:
           kotlin.code.style=official
           EOF
 
+      - name: Create launcher icons
+        run: |
+          python3 << 'PYEOF'
+          import os, base64
+
+          # Icon PNG 1x1 merah sederhana (valid PNG)
+          icon_b64 = (
+            "iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAYAAABS3GwHAAAACXBIWXMAAAsTAAALEwEAmpwYAAAF"
+            "HGlUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPD94cGFja2V0IGJlZ2luPSLvu78iIGlkPSJXNU0w"
+            "TXBDZWhpSHpyZVN6TlRjemtjOWQiPz4gPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRh"
+            "LyIgeDp4bXB0az0iQWRvYmUgWE1QIENvcmUgNi4wLWMwMDIgNzkuMTY0MzUyLCAyMDIwLzAxLzMw"
+            "LTE1OjUwOjM4ICAgICAgICAiPiA8cmRmOlJERiB4bWxuczpyZGY9Imh0dHA6Ly93d3cudzMub3Jn"
+            "LzE5OTkvMDIvMjItcmRmLXN5bnRheC1ucyMiPiA8L3JkZjpSREY+IDwveDp4bXBtZXRhPiA8P3hw"
+            "YWNrZXQgZW5kPSJyIj8+AQ=="
+          )
+
+          # Buat icon PNG sederhana pakai bytes langsung
+          import struct, zlib
+
+          def create_png(size):
+              def chunk(name, data):
+                  c = name + data
+                  return struct.pack('>I', len(data)) + c + struct.pack('>I', zlib.crc32(c) & 0xffffffff)
+              
+              sig = b'\x89PNG\r\n\x1a\n'
+              ihdr = chunk(b'IHDR', struct.pack('>IIBBBBB', size, size, 8, 2, 0, 0, 0))
+              
+              # Warna oranye #FF5722
+              pixels = []
+              for y in range(size):
+                  row = b'\x00'
+                  for x in range(size):
+                      # Lingkaran oranye
+                      cx, cy = size//2, size//2
+                      r = size//2 - 2
+                      if (x-cx)**2 + (y-cy)**2 <= r**2:
+                          row += b'\xFF\x57\x22'  # Orange
+                      else:
+                          row += b'\x12\x12\x12'  # Dark bg
+                  pixels.append(row)
+              
+              raw = b''.join(pixels)
+              compressed = zlib.compress(raw)
+              idat = chunk(b'IDAT', compressed)
+              iend = chunk(b'IEND', b'')
+              return sig + ihdr + idat + iend
+
+          sizes = {
+              'mipmap-mdpi': 48,
+              'mipmap-hdpi': 72,
+              'mipmap-xhdpi': 96,
+              'mipmap-xxhdpi': 144,
+              'mipmap-xxxhdpi': 192,
+          }
+
+          base = 'CDI_Tuner/android/app/src/main/res'
+          for folder, size in sizes.items():
+              path = os.path.join(base, folder)
+              os.makedirs(path, exist_ok=True)
+              png = create_png(size)
+              with open(os.path.join(path, 'ic_launcher.png'), 'wb') as f:
+                  f.write(png)
+              with open(os.path.join(path, 'ic_launcher_round.png'), 'wb') as f:
+                  f.write(png)
+              print(f"Created {folder}/ic_launcher.png ({size}x{size})")
+
+          print("Icons created!")
+          PYEOF
+
+      - name: Fix AndroidManifest icons
+        run: |
+          sed -i 's/@mipmap\/ic_launcher/@mipmap\/ic_launcher/g' \
+            CDI_Tuner/android/app/src/main/AndroidManifest.xml
+
       - name: Fix XML layout files
         run: |
           python3 << 'PYEOF'
           import os, re
-
           layout_dir = "CDI_Tuner/android/app/src/main/res/layout"
-
-          settings_xml = '''<?xml version="1.0" encoding="utf-8"?>
-          <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-              xmlns:app="http://schemas.android.com/apk/res-auto"
-              android:layout_width="match_parent"
-              android:layout_height="match_parent"
-              android:background="@color/bg_dark">
-              <LinearLayout
-                  android:layout_width="match_parent"
-                  android:layout_height="wrap_content"
-                  android:orientation="vertical"
-                  android:padding="16dp">
-                  <androidx.cardview.widget.CardView
-                      android:layout_width="match_parent"
-                      android:layout_height="wrap_content"
-                      android:layout_marginBottom="16dp"
-                      app:cardBackgroundColor="@color/card_bg"
-                      app:cardCornerRadius="12dp">
-                      <LinearLayout
-                          android:layout_width="match_parent"
-                          android:layout_height="wrap_content"
-                          android:orientation="vertical"
-                          android:padding="20dp">
-                          <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
-                              <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                                  android:text="Sudut Pulser" android:textColor="@color/text_primary" android:textSize="16sp" android:textStyle="bold"/>
-                              <TextView android:id="@+id/tvAngleValue" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                                  android:text="82 derajat" android:textColor="@color/chart_advance" android:textSize="20sp" android:textStyle="bold"/>
-                          </LinearLayout>
-                          <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                              android:text="Range: 50 - 95 derajat (Default Mio: 82)"
-                              android:textColor="@color/text_secondary" android:textSize="12sp" android:layout_marginTop="4dp" android:layout_marginBottom="12dp"/>
-                          <SeekBar android:id="@+id/seekAngle"
-                              android:layout_width="match_parent" android:layout_height="wrap_content"/>
-                          <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="4dp">
-                              <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                                  android:text="50" android:textColor="@color/text_secondary" android:textSize="11sp"/>
-                              <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                                  android:text="95" android:textColor="@color/text_secondary" android:textSize="11sp" android:gravity="end"/>
-                          </LinearLayout>
-                      </LinearLayout>
-                  </androidx.cardview.widget.CardView>
-                  <androidx.cardview.widget.CardView
-                      android:layout_width="match_parent"
-                      android:layout_height="wrap_content"
-                      android:layout_marginBottom="16dp"
-                      app:cardBackgroundColor="@color/card_bg"
-                      app:cardCornerRadius="12dp">
-                      <LinearLayout
-                          android:layout_width="match_parent"
-                          android:layout_height="wrap_content"
-                          android:orientation="vertical"
-                          android:padding="20dp">
-                          <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
-                              <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                                  android:text="RPM Limiter" android:textColor="@color/text_primary" android:textSize="16sp" android:textStyle="bold"/>
-                              <TextView android:id="@+id/tvLimiterValue" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                                  android:text="12000 RPM" android:textColor="@color/rpm_warning" android:textSize="18sp" android:textStyle="bold"/>
-                          </LinearLayout>
-                          <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                              android:text="Range: 4000 - 16000 RPM (step 500)"
-                              android:textColor="@color/text_secondary" android:textSize="12sp" android:layout_marginTop="4dp" android:layout_marginBottom="12dp"/>
-                          <SeekBar android:id="@+id/seekLimiter"
-                              android:layout_width="match_parent" android:layout_height="wrap_content"/>
-                          <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="4dp">
-                              <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                                  android:text="4000" android:textColor="@color/text_secondary" android:textSize="11sp"/>
-                              <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                                  android:text="16000" android:textColor="@color/text_secondary" android:textSize="11sp" android:gravity="end"/>
-                          </LinearLayout>
-                      </LinearLayout>
-                  </androidx.cardview.widget.CardView>
-                  <androidx.cardview.widget.CardView
-                      android:layout_width="match_parent"
-                      android:layout_height="wrap_content"
-                      android:layout_marginBottom="16dp"
-                      app:cardBackgroundColor="#1A2196F3"
-                      app:cardCornerRadius="12dp">
-                      <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-                          android:padding="16dp"
-                          android:text="Perubahan di sini hanya memperbarui advance map dan limiter. Tekan Kirim untuk mengirim ke CDI dan menyimpan ke EEPROM."
-                          android:textColor="@color/text_secondary" android:textSize="13sp"/>
-                  </androidx.cardview.widget.CardView>
-                  <com.google.android.material.button.MaterialButton
-                      android:id="@+id/btnSendSettings"
-                      android:layout_width="match_parent"
-                      android:layout_height="wrap_content"
-                      android:layout_marginBottom="8dp"
-                      android:text="Kirim dan Simpan ke CDI"/>
-                  <com.google.android.material.button.MaterialButton
-                      android:id="@+id/btnRevertSettings"
-                      android:layout_width="match_parent"
-                      android:layout_height="wrap_content"
-                      android:text="Kembalikan ke Config CDI"
-                      style="@style/Widget.Material3.Button.OutlinedButton"/>
-              </LinearLayout>
-          </ScrollView>'''
-
-          with open(os.path.join(layout_dir, "fragment_settings.xml"), "w") as f:
-              f.write(settings_xml)
-
-          # Fix semua file XML: escape karakter & yang tidak valid
           for fname in os.listdir(layout_dir):
               if fname.endswith(".xml"):
                   path = os.path.join(layout_dir, fname)
                   with open(path, "r", encoding="utf-8") as f:
                       content = f.read()
-                  # Escape & yang bukan bagian dari entity reference
-                  fixed = re.sub(r'&(?!(amp|lt|gt|quot|apos|#);)', '&amp;', content)
+                  fixed = re.sub(r'&(?!(amp|lt|gt|quot|apos|#)\w*;)', '&amp;', content)
                   with open(path, "w", encoding="utf-8") as f:
                       f.write(fixed)
-                  print(f"Fixed: {fname}")
-
-          print("XML fix selesai!")
+          print("XML fixed!")
           PYEOF
 
       - name: Set up JDK 17
