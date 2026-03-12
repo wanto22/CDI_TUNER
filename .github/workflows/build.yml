@@ -1,4 +1,4 @@
-name: Build CDI Tuner APK
+name: Build CDI Tuner APK v2
 
 on:
   push:
@@ -16,6 +16,30 @@ jobs:
       - name: Extract ZIP project
         run: unzip CDI_Tuner_App.zip
 
+      - name: Replace updated files
+        run: |
+          # Copy semua file yang diupdate dari repo ke project
+          cp -f updated_files/MainActivity.kt \
+            CDI_Tuner/android/app/src/main/java/com/cdi/tuner/MainActivity.kt
+          cp -f updated_files/MainViewModel.kt \
+            CDI_Tuner/android/app/src/main/java/com/cdi/tuner/viewmodel/MainViewModel.kt
+          cp -f updated_files/MonitorFragment.kt \
+            CDI_Tuner/android/app/src/main/java/com/cdi/tuner/ui/monitor/MonitorFragment.kt
+          cp -f updated_files/AdvanceMapFragment.kt \
+            CDI_Tuner/android/app/src/main/java/com/cdi/tuner/ui/advancemap/AdvanceMapFragment.kt
+          cp -f updated_files/PresetsFragment.kt \
+            CDI_Tuner/android/app/src/main/java/com/cdi/tuner/ui/presets/PresetsFragment.kt
+          cp -f updated_files/activity_main.xml \
+            CDI_Tuner/android/app/src/main/res/layout/activity_main.xml
+          cp -f updated_files/fragment_monitor.xml \
+            CDI_Tuner/android/app/src/main/res/layout/fragment_monitor.xml
+          cp -f updated_files/fragment_advance_map.xml \
+            CDI_Tuner/android/app/src/main/res/layout/fragment_advance_map.xml
+          cp -f updated_files/fragment_presets.xml \
+            CDI_Tuner/android/app/src/main/res/layout/fragment_presets.xml
+          cp -f updated_files/item_preset.xml \
+            CDI_Tuner/android/app/src/main/res/layout/item_preset.xml
+
       - name: Fix gradle.properties
         run: |
           cat > CDI_Tuner/android/gradle.properties << 'EOF'
@@ -24,80 +48,6 @@ jobs:
           org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
           kotlin.code.style=official
           EOF
-
-      - name: Create launcher icons
-        run: |
-          python3 << 'PYEOF'
-          import os, base64
-
-          # Icon PNG 1x1 merah sederhana (valid PNG)
-          icon_b64 = (
-            "iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAYAAABS3GwHAAAACXBIWXMAAAsTAAALEwEAmpwYAAAF"
-            "HGlUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPD94cGFja2V0IGJlZ2luPSLvu78iIGlkPSJXNU0w"
-            "TXBDZWhpSHpyZVN6TlRjemtjOWQiPz4gPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRh"
-            "LyIgeDp4bXB0az0iQWRvYmUgWE1QIENvcmUgNi4wLWMwMDIgNzkuMTY0MzUyLCAyMDIwLzAxLzMw"
-            "LTE1OjUwOjM4ICAgICAgICAiPiA8cmRmOlJERiB4bWxuczpyZGY9Imh0dHA6Ly93d3cudzMub3Jn"
-            "LzE5OTkvMDIvMjItcmRmLXN5bnRheC1ucyMiPiA8L3JkZjpSREY+IDwveDp4bXBtZXRhPiA8P3hw"
-            "YWNrZXQgZW5kPSJyIj8+AQ=="
-          )
-
-          # Buat icon PNG sederhana pakai bytes langsung
-          import struct, zlib
-
-          def create_png(size):
-              def chunk(name, data):
-                  c = name + data
-                  return struct.pack('>I', len(data)) + c + struct.pack('>I', zlib.crc32(c) & 0xffffffff)
-              
-              sig = b'\x89PNG\r\n\x1a\n'
-              ihdr = chunk(b'IHDR', struct.pack('>IIBBBBB', size, size, 8, 2, 0, 0, 0))
-              
-              # Warna oranye #FF5722
-              pixels = []
-              for y in range(size):
-                  row = b'\x00'
-                  for x in range(size):
-                      # Lingkaran oranye
-                      cx, cy = size//2, size//2
-                      r = size//2 - 2
-                      if (x-cx)**2 + (y-cy)**2 <= r**2:
-                          row += b'\xFF\x57\x22'  # Orange
-                      else:
-                          row += b'\x12\x12\x12'  # Dark bg
-                  pixels.append(row)
-              
-              raw = b''.join(pixels)
-              compressed = zlib.compress(raw)
-              idat = chunk(b'IDAT', compressed)
-              iend = chunk(b'IEND', b'')
-              return sig + ihdr + idat + iend
-
-          sizes = {
-              'mipmap-mdpi': 48,
-              'mipmap-hdpi': 72,
-              'mipmap-xhdpi': 96,
-              'mipmap-xxhdpi': 144,
-              'mipmap-xxxhdpi': 192,
-          }
-
-          base = 'CDI_Tuner/android/app/src/main/res'
-          for folder, size in sizes.items():
-              path = os.path.join(base, folder)
-              os.makedirs(path, exist_ok=True)
-              png = create_png(size)
-              with open(os.path.join(path, 'ic_launcher.png'), 'wb') as f:
-                  f.write(png)
-              with open(os.path.join(path, 'ic_launcher_round.png'), 'wb') as f:
-                  f.write(png)
-              print(f"Created {folder}/ic_launcher.png ({size}x{size})")
-
-          print("Icons created!")
-          PYEOF
-
-      - name: Fix AndroidManifest icons
-        run: |
-          sed -i 's/@mipmap\/ic_launcher/@mipmap\/ic_launcher/g' \
-            CDI_Tuner/android/app/src/main/AndroidManifest.xml
 
       - name: Fix XML layout files
         run: |
@@ -113,6 +63,44 @@ jobs:
                   with open(path, "w", encoding="utf-8") as f:
                       f.write(fixed)
           print("XML fixed!")
+          PYEOF
+
+      - name: Create launcher icons
+        run: |
+          python3 << 'PYEOF'
+          import os, struct, zlib
+
+          def create_png(size):
+              def chunk(name, data):
+                  c = name + data
+                  return struct.pack('>I', len(data)) + c + struct.pack('>I', zlib.crc32(c) & 0xffffffff)
+              sig  = b'\x89PNG\r\n\x1a\n'
+              ihdr = chunk(b'IHDR', struct.pack('>IIBBBBB', size, size, 8, 2, 0, 0, 0))
+              pixels = []
+              for y in range(size):
+                  row = b'\x00'
+                  for x in range(size):
+                      cx, cy = size//2, size//2
+                      r = size//2 - 2
+                      if (x-cx)**2 + (y-cy)**2 <= r**2:
+                          row += b'\xFF\x57\x22'
+                      else:
+                          row += b'\x12\x12\x12'
+                  pixels.append(row)
+              raw = b''.join(pixels)
+              idat = chunk(b'IDAT', zlib.compress(raw))
+              iend = chunk(b'IEND', b'')
+              return sig + ihdr + idat + iend
+
+          sizes = {'mipmap-mdpi':48,'mipmap-hdpi':72,'mipmap-xhdpi':96,'mipmap-xxhdpi':144,'mipmap-xxxhdpi':192}
+          base = 'CDI_Tuner/android/app/src/main/res'
+          for folder, size in sizes.items():
+              path = os.path.join(base, folder)
+              os.makedirs(path, exist_ok=True)
+              png = create_png(size)
+              with open(os.path.join(path, 'ic_launcher.png'), 'wb') as f: f.write(png)
+              with open(os.path.join(path, 'ic_launcher_round.png'), 'wb') as f: f.write(png)
+          print("Icons created!")
           PYEOF
 
       - name: Set up JDK 17
@@ -143,5 +131,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: CDI-Tuner-APK
+          name: CDI-Tuner-v2-APK
           path: CDI_Tuner/android/app/build/outputs/apk/debug/app-debug.apk
