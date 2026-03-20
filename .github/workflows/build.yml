@@ -1,4 +1,4 @@
-name: Build CDI Tuner APK v2
+name: Build CDI Tuner APK v3
 
 on:
   push:
@@ -16,29 +16,23 @@ jobs:
       - name: Extract ZIP project
         run: unzip CDI_Tuner_App.zip
 
-      - name: Replace updated files
+      - name: Extract v3 updates
+        run: unzip CDI_Tuner_v3_Update.zip
+
+      - name: Apply updated files
         run: |
-          # Copy semua file yang diupdate dari repo ke project
-          cp -f updated_files/MainActivity.kt \
-            CDI_Tuner/android/app/src/main/java/com/cdi/tuner/MainActivity.kt
-          cp -f updated_files/MainViewModel.kt \
+          cp -f CDI_Tuner_v3/CdiConfig.kt \
+            CDI_Tuner/android/app/src/main/java/com/cdi/tuner/data/CdiConfig.kt
+          cp -f CDI_Tuner_v3/PresetDatabase.kt \
+            CDI_Tuner/android/app/src/main/java/com/cdi/tuner/data/PresetDatabase.kt
+          cp -f CDI_Tuner_v3/CdiProtocol.kt \
+            CDI_Tuner/android/app/src/main/java/com/cdi/tuner/protocol/CdiProtocol.kt
+          cp -f CDI_Tuner_v3/MainViewModel.kt \
             CDI_Tuner/android/app/src/main/java/com/cdi/tuner/viewmodel/MainViewModel.kt
-          cp -f updated_files/MonitorFragment.kt \
-            CDI_Tuner/android/app/src/main/java/com/cdi/tuner/ui/monitor/MonitorFragment.kt
-          cp -f updated_files/AdvanceMapFragment.kt \
-            CDI_Tuner/android/app/src/main/java/com/cdi/tuner/ui/advancemap/AdvanceMapFragment.kt
-          cp -f updated_files/PresetsFragment.kt \
-            CDI_Tuner/android/app/src/main/java/com/cdi/tuner/ui/presets/PresetsFragment.kt
-          cp -f updated_files/activity_main.xml \
-            CDI_Tuner/android/app/src/main/res/layout/activity_main.xml
-          cp -f updated_files/fragment_monitor.xml \
-            CDI_Tuner/android/app/src/main/res/layout/fragment_monitor.xml
-          cp -f updated_files/fragment_advance_map.xml \
-            CDI_Tuner/android/app/src/main/res/layout/fragment_advance_map.xml
-          cp -f updated_files/fragment_presets.xml \
-            CDI_Tuner/android/app/src/main/res/layout/fragment_presets.xml
-          cp -f updated_files/item_preset.xml \
-            CDI_Tuner/android/app/src/main/res/layout/item_preset.xml
+          cp -f CDI_Tuner_v3/SettingsFragment.kt \
+            CDI_Tuner/android/app/src/main/java/com/cdi/tuner/ui/settings/SettingsFragment.kt
+          cp -f CDI_Tuner_v3/fragment_settings.xml \
+            CDI_Tuner/android/app/src/main/res/layout/fragment_settings.xml
 
       - name: Fix gradle.properties
         run: |
@@ -69,7 +63,6 @@ jobs:
         run: |
           python3 << 'PYEOF'
           import os, struct, zlib
-
           def create_png(size):
               def chunk(name, data):
                   c = name + data
@@ -91,7 +84,6 @@ jobs:
               idat = chunk(b'IDAT', zlib.compress(raw))
               iend = chunk(b'IEND', b'')
               return sig + ihdr + idat + iend
-
           sizes = {'mipmap-mdpi':48,'mipmap-hdpi':72,'mipmap-xhdpi':96,'mipmap-xxhdpi':144,'mipmap-xxxhdpi':192}
           base = 'CDI_Tuner/android/app/src/main/res'
           for folder, size in sizes.items():
@@ -131,5 +123,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: CDI-Tuner-v2-APK
+          name: CDI-Tuner-v3-APK
           path: CDI_Tuner/android/app/build/outputs/apk/debug/app-debug.apk
