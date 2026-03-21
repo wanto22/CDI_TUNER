@@ -1,4 +1,4 @@
-name: Build CDI Tuner APK v3
+name: Build MioTuner CDI APK v4
 
 on:
   push:
@@ -16,23 +16,23 @@ jobs:
       - name: Extract ZIP project
         run: unzip CDI_Tuner_App.zip
 
-      - name: Extract v3 updates
-        run: unzip CDI_Tuner_v3_Update.zip
+      - name: Extract v4 updates
+        run: unzip CDI_Tuner_v4_Update.zip
 
       - name: Apply updated files
         run: |
-          cp -f CDI_Tuner_v3/CdiConfig.kt \
-            CDI_Tuner/android/app/src/main/java/com/cdi/tuner/data/CdiConfig.kt
-          cp -f CDI_Tuner_v3/PresetDatabase.kt \
-            CDI_Tuner/android/app/src/main/java/com/cdi/tuner/data/PresetDatabase.kt
-          cp -f CDI_Tuner_v3/CdiProtocol.kt \
-            CDI_Tuner/android/app/src/main/java/com/cdi/tuner/protocol/CdiProtocol.kt
-          cp -f CDI_Tuner_v3/MainViewModel.kt \
-            CDI_Tuner/android/app/src/main/java/com/cdi/tuner/viewmodel/MainViewModel.kt
-          cp -f CDI_Tuner_v3/SettingsFragment.kt \
-            CDI_Tuner/android/app/src/main/java/com/cdi/tuner/ui/settings/SettingsFragment.kt
-          cp -f CDI_Tuner_v3/fragment_settings.xml \
-            CDI_Tuner/android/app/src/main/res/layout/fragment_settings.xml
+          BASE="CDI_Tuner/android/app/src/main/java/com/cdi/tuner"
+          RES="CDI_Tuner/android/app/src/main/res"
+
+          cp -f CDI_Tuner_v4/CdiConfig.kt       $BASE/data/CdiConfig.kt
+          cp -f CDI_Tuner_v4/PresetDatabase.kt   $BASE/data/PresetDatabase.kt
+          cp -f CDI_Tuner_v4/CdiProtocol.kt      $BASE/protocol/CdiProtocol.kt
+          cp -f CDI_Tuner_v4/MainViewModel.kt     $BASE/viewmodel/MainViewModel.kt
+          cp -f CDI_Tuner_v4/SettingsFragment.kt  $BASE/ui/settings/SettingsFragment.kt
+          cp -f CDI_Tuner_v4/AdvanceMapFragment.kt $BASE/ui/advancemap/AdvanceMapFragment.kt
+          cp -f CDI_Tuner_v4/fragment_settings.xml  $RES/layout/fragment_settings.xml
+          cp -f CDI_Tuner_v4/fragment_advance_map.xml $RES/layout/fragment_advance_map.xml
+          cp -f CDI_Tuner_v4/strings.xml          $RES/values/strings.xml
 
       - name: Fix gradle.properties
         run: |
@@ -59,40 +59,72 @@ jobs:
           print("XML fixed!")
           PYEOF
 
-      - name: Create launcher icons
+      - name: Create launcher icons (motor icon)
         run: |
           python3 << 'PYEOF'
-          import os, struct, zlib
-          def create_png(size):
+          import os, struct, zlib, math
+
+          def create_mio_icon(size):
               def chunk(name, data):
                   c = name + data
                   return struct.pack('>I', len(data)) + c + struct.pack('>I', zlib.crc32(c) & 0xffffffff)
+
               sig  = b'\x89PNG\r\n\x1a\n'
               ihdr = chunk(b'IHDR', struct.pack('>IIBBBBB', size, size, 8, 2, 0, 0, 0))
+
               pixels = []
+              cx, cy = size // 2, size // 2
+              r_outer = size // 2 - 1
+              r_inner = int(size * 0.35)
+
               for y in range(size):
                   row = b'\x00'
                   for x in range(size):
-                      cx, cy = size//2, size//2
-                      r = size//2 - 2
-                      if (x-cx)**2 + (y-cy)**2 <= r**2:
-                          row += b'\xFF\x57\x22'
+                      dx, dy = x - cx, y - cy
+                      dist = math.sqrt(dx*dx + dy*dy)
+                      # Background gelap
+                      if dist > r_outer:
+                          row += b'\x0D\x0D\x0D'
+                      # Ring oranye luar
+                      elif dist > r_inner:
+                          # Gradient oranye
+                          ratio = (dist - r_inner) / (r_outer - r_inner)
+                          r_col = int(255 * ratio + 180 * (1-ratio))
+                          g_col = int(87 * ratio + 30 * (1-ratio))
+                          b_col = int(34 * ratio)
+                          row += bytes([r_col, g_col, b_col])
                       else:
-                          row += b'\x12\x12\x12'
+                          # Dalam - warna gelap dengan aksen
+                          angle = math.atan2(dy, dx)
+                          # Buat pattern seperti rpm gauge
+                          seg = int((angle + math.pi) / (2 * math.pi) * 8)
+                          if seg % 2 == 0:
+                              row += b'\x1A\x1A\x2A'
+                          else:
+                              row += b'\x22\x22\x33'
                   pixels.append(row)
+
               raw = b''.join(pixels)
               idat = chunk(b'IDAT', zlib.compress(raw))
               iend = chunk(b'IEND', b'')
               return sig + ihdr + idat + iend
-          sizes = {'mipmap-mdpi':48,'mipmap-hdpi':72,'mipmap-xhdpi':96,'mipmap-xxhdpi':144,'mipmap-xxxhdpi':192}
+
+          sizes = {
+              'mipmap-mdpi': 48,
+              'mipmap-hdpi': 72,
+              'mipmap-xhdpi': 96,
+              'mipmap-xxhdpi': 144,
+              'mipmap-xxxhdpi': 192
+          }
           base = 'CDI_Tuner/android/app/src/main/res'
           for folder, size in sizes.items():
               path = os.path.join(base, folder)
               os.makedirs(path, exist_ok=True)
-              png = create_png(size)
+              png = create_mio_icon(size)
               with open(os.path.join(path, 'ic_launcher.png'), 'wb') as f: f.write(png)
               with open(os.path.join(path, 'ic_launcher_round.png'), 'wb') as f: f.write(png)
-          print("Icons created!")
+              print(f"Created {folder} icon ({size}x{size})")
+          print("All icons created!")
           PYEOF
 
       - name: Set up JDK 17
@@ -123,5 +155,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: CDI-Tuner-v3-APK
+          name: MioTuner-CDI-v4-APK
           path: CDI_Tuner/android/app/build/outputs/apk/debug/app-debug.apk
