@@ -59,6 +59,56 @@ jobs:
           print("XML fixed!")
           PYEOF
 
+      - name: Inject Android 12+ Bluetooth Permissions
+        run: |
+          python3 << 'PYEOF'
+          import os
+          manifest_path = "CDI_Tuner/android/app/src/main/AndroidManifest.xml"
+          if os.path.exists(manifest_path):
+              with open(manifest_path, "r", encoding="utf-8") as f:
+                  content = f.read()
+              
+              if "BLUETOOTH_CONNECT" not in content:
+                  permissions = """
+      <uses-permission android:name="android.permission.BLUETOOTH" />
+      <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+      <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+      <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+      <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
+      
+      <application"""
+                  content = content.replace("<application", permissions)
+                  with open(manifest_path, "w", encoding="utf-8") as f:
+                      f.write(content)
+                  print("✅ Bluetooth permissions injected successfully!")
+              else:
+                  print("✅ Permissions already exist.")
+          else:
+              print("❌ Warning: AndroidManifest.xml not found!")
+          PYEOF
+
+      - name: Fix HC-05 Connection Protocol in Kotlin
+        run: |
+          python3 << 'PYEOF'
+          import os, re
+          kt_path = "CDI_Tuner/android/app/src/main/java/com/cdi/tuner/protocol/CdiProtocol.kt"
+          if os.path.exists(kt_path):
+              with open(kt_path, "r", encoding="utf-8") as f:
+                  content = f.read()
+              
+              # Memaksa penggunaan Insecure Socket untuk HC-05
+              content = content.replace("createRfcommSocketToServiceRecord", "createInsecureRfcommSocketToServiceRecord")
+              
+              # Memaksa penggunaan UUID SPP Internasional untuk HC-05
+              content = re.sub(r'UUID\.fromString\("[^"]+"\)', 'UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")', content)
+              
+              with open(kt_path, "w", encoding="utf-8") as f:
+                  f.write(content)
+              print("✅ CdiProtocol.kt fixed for HC-05 compatibility!")
+          else:
+              print("❌ Warning: CdiProtocol.kt not found!")
+          PYEOF
+
       - name: Create launcher icons (motor icon)
         run: |
           python3 << 'PYEOF'
@@ -82,21 +132,16 @@ jobs:
                   for x in range(size):
                       dx, dy = x - cx, y - cy
                       dist = math.sqrt(dx*dx + dy*dy)
-                      # Background gelap
                       if dist > r_outer:
                           row += b'\x0D\x0D\x0D'
-                      # Ring oranye luar
                       elif dist > r_inner:
-                          # Gradient oranye
                           ratio = (dist - r_inner) / (r_outer - r_inner)
                           r_col = int(255 * ratio + 180 * (1-ratio))
                           g_col = int(87 * ratio + 30 * (1-ratio))
                           b_col = int(34 * ratio)
                           row += bytes([r_col, g_col, b_col])
                       else:
-                          # Dalam - warna gelap dengan aksen
                           angle = math.atan2(dy, dx)
-                          # Buat pattern seperti rpm gauge
                           seg = int((angle + math.pi) / (2 * math.pi) * 8)
                           if seg % 2 == 0:
                               row += b'\x1A\x1A\x2A'
@@ -123,7 +168,6 @@ jobs:
               png = create_mio_icon(size)
               with open(os.path.join(path, 'ic_launcher.png'), 'wb') as f: f.write(png)
               with open(os.path.join(path, 'ic_launcher_round.png'), 'wb') as f: f.write(png)
-              print(f"Created {folder} icon ({size}x{size})")
           print("All icons created!")
           PYEOF
 
