@@ -67,16 +67,16 @@ jobs:
           if os.path.exists(manifest_path):
               with open(manifest_path, "r", encoding="utf-8") as f:
                   content = f.read()
-              
+
               if "BLUETOOTH_CONNECT" not in content:
-                  permissions = """
-      <uses-permission android:name="android.permission.BLUETOOTH" />
-      <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
-      <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-      <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
-      <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
-      
-      <application"""
+                  permissions = (
+                      '<uses-permission android:name="android.permission.BLUETOOTH" />\n'
+                      '<uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />\n'
+                      '<uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />\n'
+                      '<uses-permission android:name="android.permission.BLUETOOTH_SCAN" />\n'
+                      '<uses-feature android:name="android.hardware.bluetooth" android:required="false" />\n\n'
+                      '<application'
+                  )
                   content = content.replace("<application", permissions)
                   with open(manifest_path, "w", encoding="utf-8") as f:
                       f.write(content)
@@ -95,13 +95,10 @@ jobs:
           if os.path.exists(kt_path):
               with open(kt_path, "r", encoding="utf-8") as f:
                   content = f.read()
-              
-              # Memaksa penggunaan Insecure Socket untuk HC-05
+
               content = content.replace("createRfcommSocketToServiceRecord", "createInsecureRfcommSocketToServiceRecord")
-              
-              # Memaksa penggunaan UUID SPP Internasional untuk HC-05
               content = re.sub(r'UUID\.fromString\("[^"]+"\)', 'UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")', content)
-              
+
               with open(kt_path, "w", encoding="utf-8") as f:
                   f.write(content)
               print("✅ CdiProtocol.kt fixed for HC-05 compatibility!")
