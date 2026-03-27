@@ -1,3 +1,142 @@
+name: Build NTECHNICAL CDI APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract ZIP project
+        run: unzip CDI_Tuner_App.zip
+
+      - name: Extract v4 updates
+        run: unzip CDI_Tuner_v4_Update.zip
+
+      - name: Apply updated files
+        run: |
+          BASE="CDI_Tuner/android/app/src/main/java/com/cdi/tuner"
+          RES="CDI_Tuner/android/app/src/main/res"
+
+          cp -f CDI_Tuner_v4/CdiConfig.kt       $BASE/data/CdiConfig.kt
+          cp -f CDI_Tuner_v4/PresetDatabase.kt   $BASE/data/PresetDatabase.kt
+          cp -f CDI_Tuner_v4/CdiProtocol.kt      $BASE/protocol/CdiProtocol.kt
+          cp -f CDI_Tuner_v4/MainViewModel.kt     $BASE/viewmodel/MainViewModel.kt
+          cp -f CDI_Tuner_v4/SettingsFragment.kt  $BASE/ui/settings/SettingsFragment.kt
+          cp -f CDI_Tuner_v4/AdvanceMapFragment.kt $BASE/ui/advancemap/AdvanceMapFragment.kt
+          cp -f CDI_Tuner_v4/fragment_settings.xml  $RES/layout/fragment_settings.xml
+          cp -f CDI_Tuner_v4/fragment_advance_map.xml $RES/layout/fragment_advance_map.xml
+          cp -f CDI_Tuner_v4/strings.xml          $RES/values/strings.xml
+
+      - name: Fix gradle.properties
+        run: |
+          cat > CDI_Tuner/android/gradle.properties << 'EOF'
+          android.useAndroidX=true
+          android.enableJetifier=true
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          kotlin.code.style=official
+          EOF
+
+      - name: Fix XML layout files
+        run: |
+          python3 << 'PYEOF'
+          import os, re
+          layout_dir = "CDI_Tuner/android/app/src/main/res/layout"
+          for fname in os.listdir(layout_dir):
+              if fname.endswith(".xml"):
+                  path = os.path.join(layout_dir, fname)
+                  with open(path, "r", encoding="utf-8") as f:
+                      content = f.read()
+                  fixed = re.sub(r'&(?!(amp|lt|gt|quot|apos|#)\w*;)', '&amp;', content)
+                  with open(path, "w", encoding="utf-8") as f:
+                      f.write(fixed)
+          PYEOF
+
+      - name: Inject Android 12+ Bluetooth Permissions
+        run: |
+          python3 << 'PYEOF'
+          import os
+          manifest_path = "CDI_Tuner/android/app/src/main/AndroidManifest.xml"
+          if os.path.exists(manifest_path):
+              with open(manifest_path, "r", encoding="utf-8") as f:
+                  content = f.read()
+
+              if "BLUETOOTH_CONNECT" not in content:
+                  permissions = (
+                      '<uses-permission android:name="android.permission.BLUETOOTH" />\n'
+                      '<uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />\n'
+                      '<uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />\n'
+                      '<uses-permission android:name="android.permission.BLUETOOTH_SCAN" />\n'
+                      '<uses-feature android:name="android.hardware.bluetooth" android:required="false" />\n\n'
+                      '<application'
+                  )
+                  content = content.replace("<application", permissions)
+                  with open(manifest_path, "w", encoding="utf-8") as f:
+                      f.write(content)
+          PYEOF
+
+      - name: Fix HC-05 Connection Protocol in Kotlin
+        run: |
+          python3 << 'PYEOF'
+          import os, re
+          kt_path = "CDI_Tuner/android/app/src/main/java/com/cdi/tuner/protocol/CdiProtocol.kt"
+          if os.path.exists(kt_path):
+              with open(kt_path, "r", encoding="utf-8") as f:
+                  content = f.read()
+
+              content = content.replace("createRfcommSocketToServiceRecord", "createInsecureRfcommSocketToServiceRecord")
+              content = re.sub(r'UUID\.fromString\("[^"]+"\)', 'UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")', content)
+
+              with open(kt_path, "w", encoding="utf-8") as f:
+                  f.write(content)
+          PYEOF
+
+      - name: Auto-Patch Kotlin for v5.7E FINAL
+        run: |
+          python3 << 'PYEOF'
+          import os, re
+
+          base = "CDI_Tuner/android/app/src/main/java/com/cdi/tuner"
+          cfg_path = os.path.join(base, "data", "CdiConfig.kt")
+          proto_path = os.path.join(base, "protocol", "CdiProtocol.kt")
+
+          if os.path.exists(cfg_path):
+              with open(cfg_path, "r", encoding="utf-8") as f:
+                  cfg = f.read()
+              cfg = re.sub(r'^\s*var\s+(pickupAngle|delta|edge).*?\n', '', cfg, flags=re.MULTILINE)
+              if 'var map1' not in cfg:
+                  cfg = re.sub(r'^\s*var\s+map\b.*?\n', 
+                               '    var map1: IntArray = IntArray(32) { 0 }\n    var map2: IntArray = IntArray(32) { 0 }\n    var map3: IntArray = IntArray(32) { 0 }\n', 
+                               cfg, flags=re.MULTILINE)
+              if 'activeMap' not in cfg:
+                  cfg = re.sub(r'(^\s*var\s+limiter.*?\n)', r'\1    var activeMap: Int = 1\n', cfg, flags=re.MULTILINE)
+              with open(cfg_path, "w", encoding="utf-8") as f:
+                  f.write(cfg)
+
+          if os.path.exists(proto_path):
+              with open(proto_path, "r", encoding="utf-8") as f:
+                  prt = f.read()
+              prt = re.sub(r'^\s*"PKA".*?\n', '', prt, flags=re.MULTILINE)
+              prt = re.sub(r'^\s*"DLT".*?\n', '', prt, flags=re.MULTILINE)
+              prt = re.sub(r'^\s*"EDG".*?\n', '', prt, flags=re.MULTILINE)
+              if '"M1"' not in prt:
+                  prt = re.sub(r'^\s*"MAP"\s*->.*?\n', 
+                               '                "M1" -> parseMapArray(value, config.map1)\n                "M2" -> parseMapArray(value, config.map2)\n                "M3" -> parseMapArray(value, config.map3)\n', 
+                               prt, flags=re.MULTILINE)
+              if '"ACT"' not in prt:
+                  prt = re.sub(r'(^\s*"LIM"\s*->.*?\n)', r'                "ACT" -> config.activeMap = value.toIntOrNull() ?: 1\n\1', prt, flags=re.MULTILINE)
+              prt = re.sub(r'config\.map(?!1|2|3)', 'config.map1', prt)
+              prt = prt.replace('"MAP:"', '"M1:"')
+              with open(proto_path, "w", encoding="utf-8") as f:
+                  f.write(prt)
+          PYEOF
+
       - name: Ganti Nama Aplikasi menjadi NTECHNICAL
         run: |
           python3 << 'PYEOF'
@@ -6,42 +145,55 @@
           if os.path.exists(path):
               with open(path, "r", encoding="utf-8") as f:
                   content = f.read()
-              # Mengubah nama app di strings.xml
               content = re.sub(r'<string name="app_name">[^<]+</string>', '<string name="app_name">NTECHNICAL</string>', content)
               with open(path, "w", encoding="utf-8") as f:
                   f.write(content)
-              print("✅ Nama aplikasi berhasil diubah menjadi NTECHNICAL!")
-          else:
-              print("❌ Peringatan: file strings.xml tidak ditemukan!")
           PYEOF
 
       - name: Buat Ikon Engine Motor
         run: |
-          # Menginstal alat pengolah gambar (ImageMagick) di server GitHub
           sudo apt-get update && sudo apt-get install -y imagemagick librsvg2-bin curl
-          
-          # Mengunduh ikon mesin motor (Engine) berwarna putih transparant
           curl -s -o engine.svg "https://api.iconify.design/mdi/engine.svg?color=white"
-          
-          # Membuat latar belakang gelap elegan (Hitam keabu-abuan) ukuran 192x192
           convert -size 192x192 xc:"#1a1a24" background.png
-          
-          # Menyesuaikan ukuran ikon mesin dan menempelkannya ke tengah latar belakang
           convert -background none engine.svg -resize 130x130 engine_resized.png
           composite -gravity center engine_resized.png background.png final_icon.png
-          
-          # Membagikan gambar ke berbagai folder ukuran layar Android (Mipmap)
           BASE="CDI_Tuner/android/app/src/main/res"
-          
           mkdir -p $BASE/mipmap-mdpi && convert final_icon.png -resize 48x48 $BASE/mipmap-mdpi/ic_launcher.png
           mkdir -p $BASE/mipmap-hdpi && convert final_icon.png -resize 72x72 $BASE/mipmap-hdpi/ic_launcher.png
           mkdir -p $BASE/mipmap-xhdpi && convert final_icon.png -resize 96x96 $BASE/mipmap-xhdpi/ic_launcher.png
           mkdir -p $BASE/mipmap-xxhdpi && convert final_icon.png -resize 144x144 $BASE/mipmap-xxhdpi/ic_launcher.png
           mkdir -p $BASE/mipmap-xxxhdpi && convert final_icon.png -resize 192x192 $BASE/mipmap-xxxhdpi/ic_launcher.png
-          
-          # Menggandakan untuk ikon versi bulat (round icons)
           for dir in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
             cp $BASE/mipmap-$dir/ic_launcher.png $BASE/mipmap-$dir/ic_launcher_round.png
           done
-          
-          echo "✅ Ikon Engine Motor berhasil dibuat dan diterapkan!"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Generate Gradle Wrapper
+        run: |
+          cd CDI_Tuner/android
+          gradle wrapper --gradle-version 8.2
+
+      - name: Make gradlew executable
+        run: chmod +x CDI_Tuner/android/gradlew
+
+      - name: Build Debug APK
+        run: |
+          cd CDI_Tuner/android
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: NTECHNICAL-CDI-APK
+          path: CDI_Tuner/android/app/build/outputs/apk/debug/app-debug.apk
