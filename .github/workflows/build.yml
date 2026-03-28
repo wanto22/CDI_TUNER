@@ -12,144 +12,113 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Create full project structure
+      - name: Extract ZIP
         run: |
-          mkdir -p NtechCDI/app/src/main/java/com/ntech/cdi/ui
-          mkdir -p NtechCDI/app/src/main/res/{layout,values,drawable,mipmap-mdpi,mipmap-hdpi,mipmap-xhdpi,mipmap-xxhdpi,mipmap-xxxhdpi}
+          unzip NtechCDI_src.zip
+          ls -la
+          echo "--- Extracted contents ---"
+          find NtechCDI -type f | head -40
 
-      - name: Copy source files
-        run: |
-          cp NtechCDI_src/app/src/main/java/com/ntech/cdi/MainActivity.kt     NtechCDI/app/src/main/java/com/ntech/cdi/
-          cp NtechCDI_src/app/src/main/java/com/ntech/cdi/CdiConfig.kt         NtechCDI/app/src/main/java/com/ntech/cdi/
-          cp NtechCDI_src/app/src/main/java/com/ntech/cdi/ui/MonitorFragment.kt NtechCDI/app/src/main/java/com/ntech/cdi/ui/
-          cp NtechCDI_src/app/src/main/java/com/ntech/cdi/ui/MapFragment.kt     NtechCDI/app/src/main/java/com/ntech/cdi/ui/
-          cp NtechCDI_src/app/src/main/java/com/ntech/cdi/ui/SettingsFragment.kt NtechCDI/app/src/main/java/com/ntech/cdi/ui/
-          cp NtechCDI_src/app/src/main/res/layout/*.xml  NtechCDI/app/src/main/res/layout/
-          cp NtechCDI_src/app/src/main/res/values/*.xml  NtechCDI/app/src/main/res/values/
-          cp NtechCDI_src/app/src/main/AndroidManifest.xml NtechCDI/app/src/main/
-          cp NtechCDI_src/app/build.gradle                 NtechCDI/app/
-
-      - name: Generate drawables + icons (Python)
+      - name: Generate drawables + icons
         run: |
           python3 << 'PYEOF'
-          import os, struct, zlib, math
+          import os, zlib, struct, math
 
-          def make_png(w, h, pixels_fn):
+          dr = 'NtechCDI/app/src/main/res/drawable'
+          os.makedirs(dr, exist_ok=True)
+
+          xmls = {
+              'card_bg.xml': '''<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#1A1A2E"/>
+    <corners android:radius="12dp"/>
+</shape>''',
+              'btn_orange.xml': '''<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#FF6B00"/>
+    <corners android:radius="8dp"/>
+</shape>''',
+              'btn_green.xml': '''<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#388E3C"/>
+    <corners android:radius="8dp"/>
+</shape>''',
+              'btn_red.xml': '''<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#C62828"/>
+    <corners android:radius="8dp"/>
+</shape>''',
+              'btn_purple.xml': '''<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#6A1B9A"/>
+    <corners android:radius="8dp"/>
+</shape>''',
+              'btn_outline.xml': '''<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <stroke android:width="1dp" android:color="#FF6B00"/>
+    <corners android:radius="8dp"/>
+    <solid android:color="#00000000"/>
+</shape>''',
+              'input_bg.xml': '''<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#0D0D0D"/>
+    <stroke android:width="1dp" android:color="#333333"/>
+    <corners android:radius="6dp"/>
+</shape>'''
+          }
+          for fname, content in xmls.items():
+              open(os.path.join(dr, fname), 'w').write(content)
+
+          # Launcher icons
+          def make_icon_png(size):
               def chunk(name, data):
                   c = name + data
-                  return struct.pack('>I',len(data)) + c + struct.pack('>I',zlib.crc32(c)&0xffffffff)
+                  return struct.pack('>I', len(data)) + c + struct.pack('>I', zlib.crc32(c) & 0xffffffff)
               sig  = b'\x89PNG\r\n\x1a\n'
-              ihdr = chunk(b'IHDR', struct.pack('>IIBBBBB',w,h,8,2,0,0,0))
+              ihdr = chunk(b'IHDR', struct.pack('>IIBBBBB', size, size, 8, 2, 0, 0, 0))
+              cx, cy = size//2, size//2
               rows = []
-              for y in range(h):
+              for y in range(size):
                   row = b'\x00'
-                  for x in range(w):
-                      row += pixels_fn(x,y,w,h)
+                  for x in range(size):
+                      dx, dy = x-cx, y-cy
+                      dist = math.sqrt(dx*dx + dy*dy)
+                      r = size//2 - 2
+                      if dist > r:
+                          row += b'\x0D\x0D\x0D'
+                      elif dist > r-8:
+                          row += b'\xFF\x6B\x00'
+                      else:
+                          ang = math.atan2(dy, dx)
+                          tooth = int((ang + math.pi) / (2*math.pi) * 12)
+                          if dist > r-18 and tooth % 2 == 0:
+                              row += b'\xFF\x6B\x00'
+                          elif dist < r*0.4:
+                              row += b'\xFF\x6B\x00'
+                          else:
+                              row += b'\x1A\x1A\x2E'
                   rows.append(row)
-              idat = chunk(b'IDAT', zlib.compress(b''.join(rows)))
-              return sig + ihdr + idat + chunk(b'IEND',b'')
+              raw  = b''.join(rows)
+              idat = chunk(b'IDAT', zlib.compress(raw))
+              iend = chunk(b'IEND', b'')
+              return sig + ihdr + idat + iend
 
-          # ── NTECH ICON (gear + engine look) ────────────────
-          def icon_pixel(x,y,w,h):
-              cx,cy = w//2,h//2
-              dx,dy = x-cx,y-cy
-              dist = math.sqrt(dx*dx+dy*dy)
-              r = w//2-2
-              # outer ring orange
-              if r-6 < dist <= r:
-                  return b'\xFF\x6B\x00'
-              # inner engine body dark
-              if dist <= r-6:
-                  # gear teeth
-                  ang = math.atan2(dy,dx)
-                  tooth = int((ang+math.pi)/(2*math.pi)*12)
-                  if dist > r-14 and tooth%2==0:
-                      return b'\xFF\x6B\x00'
-                  # center N text area
-                  if dist < r*0.45:
-                      return b'\xFF\x6B\x00'
-                  return b'\x1A\x1A\x2E'
-              return b'\x0D\x0D\x0D'
-
-          sizes = {'mipmap-mdpi':48,'mipmap-hdpi':72,'mipmap-xhdpi':96,'mipmap-xxhdpi':144,'mipmap-xxxhdpi':192}
+          sizes = {
+              'mipmap-mdpi':48,'mipmap-hdpi':72,
+              'mipmap-xhdpi':96,'mipmap-xxhdpi':144,'mipmap-xxxhdpi':192
+          }
           base = 'NtechCDI/app/src/main/res'
-          for folder,size in sizes.items():
-              png = make_png(size,size,icon_pixel)
-              path = os.path.join(base,folder)
-              os.makedirs(path,exist_ok=True)
-              open(os.path.join(path,'ic_launcher.png'),'wb').write(png)
-              open(os.path.join(path,'ic_launcher_round.png'),'wb').write(png)
+          for folder, size in sizes.items():
+              path = os.path.join(base, folder)
+              os.makedirs(path, exist_ok=True)
+              png = make_icon_png(size)
+              open(os.path.join(path, 'ic_launcher.png'), 'wb').write(png)
+              open(os.path.join(path, 'ic_launcher_round.png'), 'wb').write(png)
 
-          # ── DRAWABLE: card_bg (rounded dark card) ──────────
-          def card_pixel(x,y,w,h):
-              r=16
-              # corner rounding
-              corners = [(r,r),(w-r-1,r),(r,h-r-1),(w-r-1,h-r-1)]
-              for cx,cy in corners:
-                  if abs(x-cx)<=r and abs(y-cy)<=r:
-                      if math.sqrt((x-cx)**2+(y-cy)**2)>r:
-                          return b'\x00\x00\x00\x00'
-              return b'\x1A\x1A\x2E'
-
-          # Create 9-patch style solid color drawables as XML
-          dr = 'NtechCDI/app/src/main/res/drawable'
-          os.makedirs(dr,exist_ok=True)
-
-          open(os.path.join(dr,'card_bg.xml'),'w').write('''<?xml version="1.0" encoding="utf-8"?>
-          <shape xmlns:android="http://schemas.android.com/apk/res/android"
-              android:shape="rectangle">
-              <solid android:color="#1A1A2E"/>
-              <corners android:radius="12dp"/>
-          </shape>''')
-
-          open(os.path.join(dr,'btn_orange.xml'),'w').write('''<?xml version="1.0" encoding="utf-8"?>
-          <shape xmlns:android="http://schemas.android.com/apk/res/android"
-              android:shape="rectangle">
-              <solid android:color="#FF6B00"/>
-              <corners android:radius="8dp"/>
-          </shape>''')
-
-          open(os.path.join(dr,'btn_green.xml'),'w').write('''<?xml version="1.0" encoding="utf-8"?>
-          <shape xmlns:android="http://schemas.android.com/apk/res/android"
-              android:shape="rectangle">
-              <solid android:color="#388E3C"/>
-              <corners android:radius="8dp"/>
-          </shape>''')
-
-          open(os.path.join(dr,'btn_red.xml'),'w').write('''<?xml version="1.0" encoding="utf-8"?>
-          <shape xmlns:android="http://schemas.android.com/apk/res/android"
-              android:shape="rectangle">
-              <solid android:color="#C62828"/>
-              <corners android:radius="8dp"/>
-          </shape>''')
-
-          open(os.path.join(dr,'btn_purple.xml'),'w').write('''<?xml version="1.0" encoding="utf-8"?>
-          <shape xmlns:android="http://schemas.android.com/apk/res/android"
-              android:shape="rectangle">
-              <solid android:color="#6A1B9A"/>
-              <corners android:radius="8dp"/>
-          </shape>''')
-
-          open(os.path.join(dr,'btn_outline.xml'),'w').write('''<?xml version="1.0" encoding="utf-8"?>
-          <shape xmlns:android="http://schemas.android.com/apk/res/android"
-              android:shape="rectangle">
-              <stroke android:width="1dp" android:color="#FF6B00"/>
-              <corners android:radius="8dp"/>
-              <solid android:color="#00000000"/>
-          </shape>''')
-
-          open(os.path.join(dr,'input_bg.xml'),'w').write('''<?xml version="1.0" encoding="utf-8"?>
-          <shape xmlns:android="http://schemas.android.com/apk/res/android"
-              android:shape="rectangle">
-              <solid android:color="#0D0D0D"/>
-              <stroke android:width="1dp" android:color="#333333"/>
-              <corners android:radius="6dp"/>
-          </shape>''')
-
-          print("Assets created!")
+          print("All assets generated!")
           PYEOF
 
-      - name: Create build.gradle project level
+      - name: Create project-level build files
         run: |
           cat > NtechCDI/build.gradle << 'EOF'
           buildscript {
@@ -170,22 +139,22 @@ jobs:
           cat > NtechCDI/gradle.properties << 'EOF'
           android.useAndroidX=true
           android.enableJetifier=true
-          org.gradle.jvmargs=-Xmx2048m
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
           EOF
 
       - name: Fix XML ampersands
         run: |
-          python3 -c "
-          import os,re
-          for root,_,files in os.walk('NtechCDI/app/src/main/res'):
+          python3 << 'PYEOF'
+          import os, re
+          for root, _, files in os.walk('NtechCDI/app/src/main/res'):
               for f in files:
                   if f.endswith('.xml'):
-                      p=os.path.join(root,f)
-                      c=open(p).read()
-                      fixed=re.sub(r'&(?!(amp|lt|gt|quot|apos|#))',r'&amp;',c)
-                      open(p,'w').write(fixed)
-          print('XML fixed')
-          "
+                      p = os.path.join(root, f)
+                      c = open(p, encoding='utf-8').read()
+                      fixed = re.sub(r'&(?!(amp|lt|gt|quot|apos|#)\w*;)', '&amp;', c)
+                      open(p, 'w', encoding='utf-8').write(fixed)
+          print("XML fixed!")
+          PYEOF
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -199,15 +168,17 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
-      - name: Generate wrapper
+      - name: Generate Gradle Wrapper
         run: |
           cd NtechCDI
           gradle wrapper --gradle-version 8.2
 
+      - name: Make gradlew executable
+        run: chmod +x NtechCDI/gradlew
+
       - name: Build APK
         run: |
           cd NtechCDI
-          chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
 
       - name: Upload APK
