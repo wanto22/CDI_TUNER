@@ -132,8 +132,15 @@ jobs:
           mkdir -p $BASE/drawable
           cp ntech_bg.png $BASE/drawable/ntech_bg.png
 
-          # 3. Pasang Wallpaper NTECH ke Layar Aplikasi
-          python3 -c 'import re,os; p="CDI_Tuner/android/app/src/main/res/layout/activity_main.xml"; c=open(p).read(); c=re.sub(r"(<androidx.constraintlayout.widget.ConstraintLayout[^>]+)", r"\1 android:background=\"@drawable/ntech_bg\"", c); open(p,"w").write(c)'
+          # 3. Pasang Wallpaper NTECH ke Layar Aplikasi (DIPERBAIKI)
+          python3 << 'PYEOF'
+          import re, os
+          p = "CDI_Tuner/android/app/src/main/res/layout/activity_main.xml"
+          if os.path.exists(p):
+              c = open(p).read()
+              c = re.sub(r'(<androidx\.constraintlayout\.widget\.ConstraintLayout[^>]+)', r'\1 android:background="@drawable/ntech_bg"', c)
+              open(p, "w").write(c)
+          PYEOF
 
       # 5. KOMPILASI APK
       - name: Set up JDK 17
