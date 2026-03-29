@@ -1,4 +1,4 @@
-name: Build NTECHNICAL CDI APK
+name: Build NTECH CDI Tuner APK
 
 on:
   push:
@@ -8,141 +8,185 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      # 1. BONGKAR BAHAN DASAR
-      - name: Extract ZIP project
-        run: unzip CDI_Tuner_App.zip
-
-      - name: Extract v4 updates
-        run: unzip CDI_Tuner_v4_Update.zip
-
-      - name: Apply updated files
+      - name: Create full project structure
         run: |
-          BASE="CDI_Tuner/android/app/src/main/java/com/cdi/tuner"
-          RES="CDI_Tuner/android/app/src/main/res"
-          cp -f CDI_Tuner_v4/CdiConfig.kt       $BASE/data/CdiConfig.kt
-          cp -f CDI_Tuner_v4/PresetDatabase.kt   $BASE/data/PresetDatabase.kt
-          cp -f CDI_Tuner_v4/CdiProtocol.kt      $BASE/protocol/CdiProtocol.kt
-          cp -f CDI_Tuner_v4/MainViewModel.kt     $BASE/viewmodel/MainViewModel.kt
-          cp -f CDI_Tuner_v4/SettingsFragment.kt  $BASE/ui/settings/SettingsFragment.kt
-          cp -f CDI_Tuner_v4/AdvanceMapFragment.kt $BASE/ui/advancemap/AdvanceMapFragment.kt
-          cp -f CDI_Tuner_v4/fragment_settings.xml  $RES/layout/fragment_settings.xml
-          cp -f CDI_Tuner_v4/fragment_advance_map.xml $RES/layout/fragment_advance_map.xml
-          cp -f CDI_Tuner_v4/strings.xml          $RES/values/strings.xml
+          mkdir -p NtechCDI/app/src/main/java/com/ntech/cdi/ui
+          mkdir -p NtechCDI/app/src/main/res/{layout,values,drawable,mipmap-mdpi,mipmap-hdpi,mipmap-xhdpi,mipmap-xxhdpi,mipmap-xxxhdpi}
 
-      - name: Fix gradle.properties
+      - name: Copy source files
         run: |
-          cat > CDI_Tuner/android/gradle.properties << 'EOF'
-          android.useAndroidX=true
-          android.enableJetifier=true
-          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
-          kotlin.code.style=official
+          cp NtechCDI_src/app/src/main/java/com/ntech/cdi/MainActivity.kt     NtechCDI/app/src/main/java/com/ntech/cdi/
+          cp NtechCDI_src/app/src/main/java/com/ntech/cdi/CdiConfig.kt         NtechCDI/app/src/main/java/com/ntech/cdi/
+          cp NtechCDI_src/app/src/main/java/com/ntech/cdi/ui/MonitorFragment.kt NtechCDI/app/src/main/java/com/ntech/cdi/ui/
+          cp NtechCDI_src/app/src/main/java/com/ntech/cdi/ui/MapFragment.kt     NtechCDI/app/src/main/java/com/ntech/cdi/ui/
+          cp NtechCDI_src/app/src/main/java/com/ntech/cdi/ui/SettingsFragment.kt NtechCDI/app/src/main/java/com/ntech/cdi/ui/
+          cp NtechCDI_src/app/src/main/res/layout/*.xml  NtechCDI/app/src/main/res/layout/
+          cp NtechCDI_src/app/src/main/res/values/*.xml  NtechCDI/app/src/main/res/values/
+          cp NtechCDI_src/app/src/main/AndroidManifest.xml NtechCDI/app/src/main/
+          cp NtechCDI_src/app/build.gradle                 NtechCDI/app/
+
+      - name: Generate drawables + icons (Python)
+        run: |
+          python3 << 'PYEOF'
+          import os, struct, zlib, math
+
+          def make_png(w, h, pixels_fn):
+              def chunk(name, data):
+                  c = name + data
+                  return struct.pack('>I',len(data)) + c + struct.pack('>I',zlib.crc32(c)&0xffffffff)
+              sig  = b'\x89PNG\r\n\x1a\n'
+              ihdr = chunk(b'IHDR', struct.pack('>IIBBBBB',w,h,8,2,0,0,0))
+              rows = []
+              for y in range(h):
+                  row = b'\x00'
+                  for x in range(w):
+                      row += pixels_fn(x,y,w,h)
+                  rows.append(row)
+              idat = chunk(b'IDAT', zlib.compress(b''.join(rows)))
+              return sig + ihdr + idat + chunk(b'IEND',b'')
+
+          # ── NTECH ICON (gear + engine look) ────────────────
+          def icon_pixel(x,y,w,h):
+              cx,cy = w//2,h//2
+              dx,dy = x-cx,y-cy
+              dist = math.sqrt(dx*dx+dy*dy)
+              r = w//2-2
+              # outer ring orange
+              if r-6 < dist <= r:
+                  return b'\xFF\x6B\x00'
+              # inner engine body dark
+              if dist <= r-6:
+                  # gear teeth
+                  ang = math.atan2(dy,dx)
+                  tooth = int((ang+math.pi)/(2*math.pi)*12)
+                  if dist > r-14 and tooth%2==0:
+                      return b'\xFF\x6B\x00'
+                  # center N text area
+                  if dist < r*0.45:
+                      return b'\xFF\x6B\x00'
+                  return b'\x1A\x1A\x2E'
+              return b'\x0D\x0D\x0D'
+
+          sizes = {'mipmap-mdpi':48,'mipmap-hdpi':72,'mipmap-xhdpi':96,'mipmap-xxhdpi':144,'mipmap-xxxhdpi':192}
+          base = 'NtechCDI/app/src/main/res'
+          for folder,size in sizes.items():
+              png = make_png(size,size,icon_pixel)
+              path = os.path.join(base,folder)
+              os.makedirs(path,exist_ok=True)
+              open(os.path.join(path,'ic_launcher.png'),'wb').write(png)
+              open(os.path.join(path,'ic_launcher_round.png'),'wb').write(png)
+
+          # ── DRAWABLE: card_bg (rounded dark card) ──────────
+          def card_pixel(x,y,w,h):
+              r=16
+              # corner rounding
+              corners = [(r,r),(w-r-1,r),(r,h-r-1),(w-r-1,h-r-1)]
+              for cx,cy in corners:
+                  if abs(x-cx)<=r and abs(y-cy)<=r:
+                      if math.sqrt((x-cx)**2+(y-cy)**2)>r:
+                          return b'\x00\x00\x00\x00'
+              return b'\x1A\x1A\x2E'
+
+          # Create 9-patch style solid color drawables as XML
+          dr = 'NtechCDI/app/src/main/res/drawable'
+          os.makedirs(dr,exist_ok=True)
+
+          open(os.path.join(dr,'card_bg.xml'),'w').write('''<?xml version="1.0" encoding="utf-8"?>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android"
+              android:shape="rectangle">
+              <solid android:color="#1A1A2E"/>
+              <corners android:radius="12dp"/>
+          </shape>''')
+
+          open(os.path.join(dr,'btn_orange.xml'),'w').write('''<?xml version="1.0" encoding="utf-8"?>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android"
+              android:shape="rectangle">
+              <solid android:color="#FF6B00"/>
+              <corners android:radius="8dp"/>
+          </shape>''')
+
+          open(os.path.join(dr,'btn_green.xml'),'w').write('''<?xml version="1.0" encoding="utf-8"?>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android"
+              android:shape="rectangle">
+              <solid android:color="#388E3C"/>
+              <corners android:radius="8dp"/>
+          </shape>''')
+
+          open(os.path.join(dr,'btn_red.xml'),'w').write('''<?xml version="1.0" encoding="utf-8"?>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android"
+              android:shape="rectangle">
+              <solid android:color="#C62828"/>
+              <corners android:radius="8dp"/>
+          </shape>''')
+
+          open(os.path.join(dr,'btn_purple.xml'),'w').write('''<?xml version="1.0" encoding="utf-8"?>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android"
+              android:shape="rectangle">
+              <solid android:color="#6A1B9A"/>
+              <corners android:radius="8dp"/>
+          </shape>''')
+
+          open(os.path.join(dr,'btn_outline.xml'),'w').write('''<?xml version="1.0" encoding="utf-8"?>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android"
+              android:shape="rectangle">
+              <stroke android:width="1dp" android:color="#FF6B00"/>
+              <corners android:radius="8dp"/>
+              <solid android:color="#00000000"/>
+          </shape>''')
+
+          open(os.path.join(dr,'input_bg.xml'),'w').write('''<?xml version="1.0" encoding="utf-8"?>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android"
+              android:shape="rectangle">
+              <solid android:color="#0D0D0D"/>
+              <stroke android:width="1dp" android:color="#333333"/>
+              <corners android:radius="6dp"/>
+          </shape>''')
+
+          print("Assets created!")
+          PYEOF
+
+      - name: Create build.gradle project level
+        run: |
+          cat > NtechCDI/build.gradle << 'EOF'
+          buildscript {
+              repositories { google(); mavenCentral() }
+              dependencies {
+                  classpath 'com.android.tools.build:gradle:8.2.0'
+                  classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.10'
+              }
+          }
+          allprojects { repositories { google(); mavenCentral() } }
           EOF
 
-      # 2. OBAT ANTI-ERROR BLUETOOTH
-      - name: Inject Android 12+ Bluetooth Permissions
+          cat > NtechCDI/settings.gradle << 'EOF'
+          rootProject.name = "NtechCDI"
+          include ':app'
+          EOF
+
+          cat > NtechCDI/gradle.properties << 'EOF'
+          android.useAndroidX=true
+          android.enableJetifier=true
+          org.gradle.jvmargs=-Xmx2048m
+          EOF
+
+      - name: Fix XML ampersands
         run: |
-          python3 << 'PYEOF'
-          import os
-          manifest_path = "CDI_Tuner/android/app/src/main/AndroidManifest.xml"
-          if os.path.exists(manifest_path):
-              with open(manifest_path, "r", encoding="utf-8") as f: content = f.read()
-              if "BLUETOOTH_CONNECT" not in content:
-                  permissions = ('<uses-permission android:name="android.permission.BLUETOOTH" />\n<uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />\n<uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />\n<uses-permission android:name="android.permission.BLUETOOTH_SCAN" />\n<uses-feature android:name="android.hardware.bluetooth" android:required="false" />\n\n<application')
-                  content = content.replace("<application", permissions)
-                  with open(manifest_path, "w", encoding="utf-8") as f: f.write(content)
-          PYEOF
+          python3 -c "
+          import os,re
+          for root,_,files in os.walk('NtechCDI/app/src/main/res'):
+              for f in files:
+                  if f.endswith('.xml'):
+                      p=os.path.join(root,f)
+                      c=open(p).read()
+                      fixed=re.sub(r'&(?!(amp|lt|gt|quot|apos|#))',r'&amp;',c)
+                      open(p,'w').write(fixed)
+          print('XML fixed')
+          "
 
-      - name: Fix HC-05 Connection Protocol (Insecure Socket)
-        run: |
-          python3 << 'PYEOF'
-          import os, re
-          kt_path = "CDI_Tuner/android/app/src/main/java/com/cdi/tuner/protocol/CdiProtocol.kt"
-          if os.path.exists(kt_path):
-              with open(kt_path, "r", encoding="utf-8") as f: content = f.read()
-              content = content.replace("createRfcommSocketToServiceRecord", "createInsecureRfcommSocketToServiceRecord")
-              content = re.sub(r'UUID\.fromString\("[^"]+"\)', 'UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")', content)
-              with open(kt_path, "w", encoding="utf-8") as f: f.write(content)
-          PYEOF
-
-      # 3. SINKRONISASI PROTOKOL V5.7F (EDG, RBL, RSK)
-      - name: Auto-Patch Kotlin for v5.7F FINAL
-        run: |
-          python3 << 'PYEOF'
-          import os, re
-          base = "CDI_Tuner/android/app/src/main/java/com/cdi/tuner"
-          cfg_path = os.path.join(base, "data", "CdiConfig.kt")
-          proto_path = os.path.join(base, "protocol", "CdiProtocol.kt")
-
-          if os.path.exists(cfg_path):
-              with open(cfg_path, "r", encoding="utf-8") as f: cfg = f.read()
-              cfg = re.sub(r'^\s*var\s+(pickupAngle|delta).*?\n', '', cfg, flags=re.MULTILINE)
-              if 'var map1' not in cfg:
-                  cfg = re.sub(r'^\s*var\s+map\b.*?\n', '    var map1: IntArray = IntArray(32) { 0 }\n    var map2: IntArray = IntArray(32) { 0 }\n    var map3: IntArray = IntArray(32) { 0 }\n', cfg, flags=re.MULTILINE)
-              if 'activeMap' not in cfg:
-                  cfg = re.sub(r'(^\s*var\s+limiter.*?\n)', r'\1    var activeMap: Int = 1\n    var edge: Int = 0\n    var rumbleRpm: Int = 0\n    var rumbleSkip: Int = 3\n', cfg, flags=re.MULTILINE)
-              with open(cfg_path, "w", encoding="utf-8") as f: f.write(cfg)
-
-          if os.path.exists(proto_path):
-              with open(proto_path, "r", encoding="utf-8") as f: prt = f.read()
-              prt = re.sub(r'^\s*"PKA".*?\n', '', prt, flags=re.MULTILINE)
-              prt = re.sub(r'^\s*"DLT".*?\n', '', prt, flags=re.MULTILINE)
-              if '"M1"' not in prt:
-                  prt = re.sub(r'^\s*"MAP"\s*->.*?\n', '                "M1" -> parseMapArray(value, config.map1)\n                "M2" -> parseMapArray(value, config.map2)\n                "M3" -> parseMapArray(value, config.map3)\n', prt, flags=re.MULTILINE)
-              if '"ACT"' not in prt:
-                  prt = re.sub(r'(^\s*"LIM"\s*->.*?\n)', r'                "ACT" -> config.activeMap = value.toIntOrNull() ?: 1\n                "EDG" -> config.edge = value.toIntOrNull() ?: 0\n                "RBL" -> config.rumbleRpm = value.toIntOrNull() ?: 0\n                "RSK" -> config.rumbleSkip = value.toIntOrNull() ?: 3\n\1', prt, flags=re.MULTILINE)
-              prt = re.sub(r'config\.map(?!1|2|3)', 'config.map1', prt)
-              prt = prt.replace('"MAP:"', '"M1:"')
-              with open(proto_path, "w", encoding="utf-8") as f: f.write(prt)
-          PYEOF
-
-      # 4. MEMBUAT DESAIN NTECH ENGINE & WALLPAPER APLIKASI
-      - name: Generate NTECH Branding & Background
-        run: |
-          sudo apt-get update && sudo apt-get install -y imagemagick librsvg2-bin curl
-          
-          # Mengubah Nama Aplikasi
-          python3 -c 'import re; f=open("CDI_Tuner/android/app/src/main/res/values/strings.xml","r+"); c=re.sub(r"<string name=\"app_name\">[^<]+</string>", "<string name=\"app_name\">NTECHNICAL</string>", f.read()); f.seek(0); f.write(c); f.truncate(); f.close()'
-          
-          # Unduh Ikon Engine (Warna Oranye Racing #FF6B00)
-          curl -s -o engine.svg "https://api.iconify.design/mdi/engine.svg?color=%23FF6B00"
-          
-          # 1. Buat Ikon Aplikasi (Logo Bulat/Kotak)
-          convert -size 192x192 xc:"#1A1A2E" icon_bg.png
-          convert -background none engine.svg -resize 130x130 engine_icon.png
-          composite -gravity center engine_icon.png icon_bg.png final_icon.png
-          
-          BASE="CDI_Tuner/android/app/src/main/res"
-          mkdir -p $BASE/mipmap-mdpi && convert final_icon.png -resize 48x48 $BASE/mipmap-mdpi/ic_launcher.png
-          mkdir -p $BASE/mipmap-hdpi && convert final_icon.png -resize 72x72 $BASE/mipmap-hdpi/ic_launcher.png
-          mkdir -p $BASE/mipmap-xhdpi && convert final_icon.png -resize 96x96 $BASE/mipmap-xhdpi/ic_launcher.png
-          mkdir -p $BASE/mipmap-xxhdpi && convert final_icon.png -resize 144x144 $BASE/mipmap-xxhdpi/ic_launcher.png
-          mkdir -p $BASE/mipmap-xxxhdpi && convert final_icon.png -resize 192x192 $BASE/mipmap-xxxhdpi/ic_launcher.png
-          for dir in mdpi hdpi xhdpi xxhdpi xxxhdpi; do cp $BASE/mipmap-$dir/ic_launcher.png $BASE/mipmap-$dir/ic_launcher_round.png; done
-
-          # 2. Buat Wallpaper NTECH (Gelap dengan Engine Besar & Tulisan NTECH)
-          convert -size 1080x1920 xc:"#0D0D17" wall_bg.png
-          convert -background none engine.svg -resize 700x700 engine_wall.png
-          composite -gravity center -blend 40% engine_wall.png wall_bg.png temp_wall.png
-          convert temp_wall.png -gravity center -font Helvetica -pointsize 100 -fill "#FF6B00" -annotate +0+450 "NTECH" ntech_bg.png
-          mkdir -p $BASE/drawable
-          cp ntech_bg.png $BASE/drawable/ntech_bg.png
-
-          # 3. Pasang Wallpaper NTECH ke Layar Aplikasi (DIPERBAIKI)
-          python3 << 'PYEOF'
-          import re, os
-          p = "CDI_Tuner/android/app/src/main/res/layout/activity_main.xml"
-          if os.path.exists(p):
-              c = open(p).read()
-              c = re.sub(r'(<androidx\.constraintlayout\.widget\.ConstraintLayout[^>]+)', r'\1 android:background="@drawable/ntech_bg"', c)
-              open(p, "w").write(c)
-          PYEOF
-
-      # 5. KOMPILASI APK
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -155,21 +199,19 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
-      - name: Generate Gradle Wrapper
+      - name: Generate wrapper
         run: |
-          cd CDI_Tuner/android
+          cd NtechCDI
           gradle wrapper --gradle-version 8.2
 
-      - name: Make gradlew executable
-        run: chmod +x CDI_Tuner/android/gradlew
-
-      - name: Build Debug APK
+      - name: Build APK
         run: |
-          cd CDI_Tuner/android
+          cd NtechCDI
+          chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: NTECHNICAL-CDI-APK
-          path: CDI_Tuner/android/app/build/outputs/apk/debug/app-debug.apk
+          name: NTECH-CDI-Tuner-APK
+          path: NtechCDI/app/build/outputs/apk/debug/app-debug.apk
