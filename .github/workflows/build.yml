@@ -68,11 +68,12 @@ jobs:
           import androidx.appcompat.app.AlertDialog; import androidx.appcompat.app.AppCompatActivity
           import androidx.fragment.app.Fragment
           import com.ntech.cdi.ui.*
-          import java.io.*; import java.util.*
+          import java.io.*; import java.util.*; import java.util.concurrent.Executors
           class MainActivity : AppCompatActivity() {
               companion object {
                   var socket: BluetoothSocket?=null; var outStream: OutputStream?=null; var inStream: InputStream?=null
                   var isConnected=false; var onDataReceived:((String)->Unit)?=null; val config=CdiConfig()
+                  val exec = Executors.newSingleThreadExecutor()
               }
               private lateinit var tvStatus:TextView; private lateinit var btnConnect:TextView
               private lateinit var tvInfo:TextView; private lateinit var navMonitor:TextView
@@ -119,7 +120,7 @@ jobs:
               }
               private fun startRead(){Thread{val buf=ByteArray(256);val sb=StringBuilder();while(isConnected){try{val n=inStream?.read(buf)?:break;if(n>0){sb.append(String(buf,0,n));var i:Int;while(sb.indexOf("\n").also{i=it}>=0){val l=sb.substring(0,i).trim();sb.delete(0,i+1);if(l.isNotEmpty()){config.parseLine(l);runOnUiThread{onDataReceived?.invoke(l)}}}}
               }catch(e:Exception){break}}}.start()}
-              fun sendCmd(cmd:String){Thread{try{outStream?.write(cmd.toByteArray())}catch(e:Exception){}}.start()}
+              fun sendCmd(cmd:String){exec.execute{try{outStream?.write(cmd.toByteArray());Thread.sleep(200)}catch(e:Exception){}}}
               private fun disconnect(){isConnected=false;try{socket?.close()}catch(e:Exception){};socket=null;outStream=null;inStream=null;updateUI()}
               private fun updateUI(name:String=""){if(isConnected){tvStatus.text="Terhubung";tvStatus.setTextColor(0xFF00E676.toInt());tvInfo.text=name;btnConnect.text="Putuskan";btnConnect.setBackgroundColor(0xFFCC3333.toInt())}else{tvStatus.text="Terputus";tvStatus.setTextColor(0xFFFF5252.toInt());tvInfo.text="";btnConnect.text="Hubungkan";btnConnect.setBackgroundColor(0xFFFF6B00.toInt())}}
           }''')
